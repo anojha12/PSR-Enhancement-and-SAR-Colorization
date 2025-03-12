@@ -47,7 +47,7 @@ def load_datasets():
     transforms.ToTensor(),
     transforms.Normalize(mean=(0.5,0.5,0.5,), std=(0.5,0.5,0.5,))
     ])
-    # s1フォルダにはSAR画像のセット、s2フォルダには光学画像のセットが入っています。
+    
     SAR_trainsets = datasets.ImageFolder(root = '/home/anojha/Final_training_dataset/s1',transform=SAR_transform)
     opt_trainsets = datasets.ImageFolder(root = '/home/anojha/Final_training_dataset/s2',transform=opt_transform)
     Image_datasets = ConcatDataset(SAR_trainsets,opt_trainsets)
@@ -136,13 +136,13 @@ def train():
     params_G = torch.optim.Adam(model_G.parameters(),lr=0.0002, betas=(0.5, 0.999))
     params_D = torch.optim.Adam(model_D.parameters(),lr=0.0002, betas=(0.5, 0.999))
 
-    # ラベル変数 (PatchGAN),損失関数
+    
     ones = torch.ones(128, 1, 32, 32).to(device)
     zeros = torch.zeros(128, 1, 32, 32).to(device)
     bce_loss = nn.BCEWithLogitsLoss()
     mae_loss = nn.L1Loss()
 
-    # 損失を表示するための辞書
+    
     result = {}
     result["log_loss_G_sum"] = []
     result["log_loss_G_bce"] = []
@@ -154,24 +154,18 @@ def train():
     output_Gmae = []
     output_D = []
 
-    # 訓練
+    
     dataset = load_datasets()
     print("Dataset Loaded!!")
     for i in tqdm(range(100), desc="Epochs", unit="epoch"):
         log_loss_G_sum, log_loss_G_bce, log_loss_G_mae, log_loss_D = [], [], [], []
 
-        for (input_gray, real_color) in dataset:
-            # input_gray[0] がSAR画像、input_gray[1]がラベル(今回は必要ない)
-            # real_color[0]が光学画像、input_gray[1]がラベル            
+        for (input_gray, real_color) in dataset:    
             batch_len = len(real_color[0])
             real_color, input_gray = real_color[0].to(device), input_gray[0].to(device)
-            ### Gの訓練
-            # 偽のカラー画像を作成
             fake_color = model_G(input_gray)
-            # 識別器の学習の際に生成器に影響が出ないようにするため、偽画像を一時保存
             fake_color_tensor = fake_color.detach()
-            # 偽画像を本物と騙せるようにロスを計算
-            LAMBD = 100.0 # L1損失と交差エントロピー損失の比率を決める超パラメータ
+            LAMBD = 100.0
             out = model_D(torch.cat([fake_color, input_gray], dim=1))
             loss_G_bce = bce_loss(out, ones[:batch_len])
             loss_G_mae = LAMBD * mae_loss(fake_color, real_color)
@@ -179,23 +173,17 @@ def train():
             log_loss_G_bce.append(loss_G_bce.item())
             log_loss_G_mae.append(loss_G_mae.item())
             log_loss_G_sum.append(loss_G_sum.item())
-            # 微分計算・重み更新
             params_D.zero_grad()
             params_G.zero_grad()
             loss_G_sum.backward()
             params_G.step()
 
-            ### Discriminatorの訓練
-            # 本物のカラー画像を本物と識別できるようにロスを計算
             real_out = model_D(torch.cat([real_color, input_gray], dim=1))
             loss_D_real = bce_loss(real_out, ones[:batch_len])
-            # 偽の画像の偽と識別できるようにロスを計算
             fake_out = model_D(torch.cat([fake_color_tensor, input_gray], dim=1))
             loss_D_fake = bce_loss(fake_out, zeros[:batch_len])
-            # 実画像と偽画像のロスを合計
             loss_D = loss_D_real + loss_D_fake
             log_loss_D.append(loss_D.item())
-            # 微分計算・重み更新
             params_D.zero_grad()
             params_G.zero_grad()
             loss_D.backward()
@@ -214,10 +202,10 @@ def train():
         output_Gmae.append(result['log_loss_G_mae'][-1])
         output_D.append(result['log_loss_D'][-1])
         
-        # 画像を保存
+
         if not os.path.exists("SARtoOpt"):
             os.mkdir("SARtoOpt")
-        # 生成画像を保存
+    
         torchvision.utils.save_image(input_gray[:min(batch_len, 100)],
                                 f"SARtoOpt/gray_epoch_{i:03}.png", normalize=True)
         torchvision.utils.save_image(fake_color_tensor[:min(batch_len, 100)],
@@ -225,7 +213,7 @@ def train():
         torchvision.utils.save_image(real_color[:min(batch_len, 100)],
                                 f"SARtoOpt/real_epoch_{i:03}.png", normalize=True)
 
-        # 生成器と識別器の学習モデルをそれぞれ保存
+
         if not os.path.exists("SARtoOpt/models"):
             os.mkdir("SARtoOpt/models")
         if i % 2 == 0 or i == 99:
@@ -238,7 +226,7 @@ def train():
             plt.savefig(f"SARtoOpt/models/l_curve_{i:03}.png", dpi=300) 
 
     
-    # ログ
+
     with open("SARtoOpt/logs.pkl", "wb") as fp:
         pickle.dump(result, fp)
     
